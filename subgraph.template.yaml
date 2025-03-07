@@ -16,10 +16,82 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - SystemInstance
+        - Safe
+        - Timelock
+        - TimelockProposal
       abis:
         - name: InstanceDeployer
           file: ./abis/InstanceDeployer.json
+        - name: Safe
+          file: ./abis/Safe.json
+        - name: Timelock
+          file: ./abis/Timelock.json
       eventHandlers:
         - event: SystemInstanceCreated(indexed address,indexed address,indexed address,uint256)
           handler: handleSystemInstanceCreated
       file: ./src/mapping.ts
+templates:
+  - kind: ethereum/contract
+    name: Safe
+    network: {{ network }}
+    source:
+      abi: Safe
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      file: ./src/mapping.ts
+      entities:
+        - Safe
+      abis:
+        - name: Safe
+          file: ./abis/Safe.json
+      eventHandlers:
+        - event: AddedOwner(address)
+          handler: handleAddedOwner
+        - event: RemovedOwner(address)
+          handler: handleRemovedOwner
+        - event: ChangedThreshold(uint256)
+          handler: handleChangedThreshold
+        - event: EnabledModule(address)
+          handler: handleEnabledModule
+        - event: DisabledModule(address)
+          handler: handleDisabledModule
+
+  - kind: ethereum/contract
+    name: Timelock
+    network: {{ network }}
+    source:
+      abi: Timelock
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      file: ./src/mapping.ts
+      entities:
+        - Timelock
+        - TimelockProposal
+      abis:
+        - name: Timelock
+          file: ./abis/Timelock.json
+      eventHandlers:
+        - event: CallScheduled(indexed bytes32,indexed uint256,indexed address,uint256,bytes,bytes32,uint256)
+          handler: handleCallScheduled
+        - event: CallExecuted(indexed bytes32,indexed uint256,address,uint256,bytes)
+          handler: handleCallExecuted
+        - event: Cancelled(indexed bytes32)
+          handler: handleCancelled
+        - event: Cleanup(indexed bytes32)
+          handler: handleCleanup
+        - event: MinDelayChange(indexed uint256,uint256)
+          handler: handleMinDelayChange
+        - event: ExpirationPeriodChange(indexed uint256,uint256)
+          handler: handleExpirationPeriodChange
+        - event: PauseDurationUpdated(indexed uint256,uint256)
+          handler: handlePauseDurationUpdated
+        - event: PauseGuardianUpdated(indexed address,indexed address)
+          handler: handlePauseGuardianUpdated
+        - event: PauseTimeUpdated(indexed uint256)
+          handler: handlePauseTimeUpdated
+        - event: Paused(address)
+          handler: handlePaused
