@@ -1,37 +1,7 @@
-type Token @entity
-{
-  id:                           ID!
-  owner:                        Account!
-  event:                        Event
-  transfers:                    [Transfer!]! @derivedFrom(field: "token")
-  transferCount:                BigInt!
-  created:                      BigInt!
-  mintOrder:                    BigInt
-}
-
-type Account @entity
-{
-  id:                           ID!
-  tokens:                       [Token!]! @derivedFrom(field: "owner")
-  tokensOwned:                  BigInt!
-}
-
-type Event @entity
-{
-  id:                           ID!
-  tokens:                       [Token!]! @derivedFrom(field: "event")
-  tokenCount:              	    BigInt!
-  created:                      BigInt!
-  transferCount:                BigInt!
-  tokenMints:                   BigInt!
-}
-
-type Transfer @entity
-{
-  id:                           ID!
-  token:                        Token!
-  from:                         Account!
-  to:                           Account!
-  transaction:                  Bytes!
-  timestamp:                    BigInt!
+type SystemInstance @entity {
+  id: ID!                    # A unique identifier (could be transaction hash + log index)
+  safe: String!              # The address of the safe (as a hex string)
+  timelock: String!          # The address of the timelock (as a hex string)
+  creator: String!           # The address that created the instance (as a hex string)
+  creationTime: BigInt!      # When the instance was created
 }
