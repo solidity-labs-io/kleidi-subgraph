@@ -5,6 +5,33 @@ import {
   Bytes
 } from '@graphprotocol/graph-ts'
 
+/**
+ * Utility function to deduplicate an array of addresses
+ * @param addresses Array of address strings to deduplicate
+ * @returns Array with unique addresses only
+ */
+function deduplicateAddresses(addresses: string[]): string[] {
+  let uniqueAddresses: string[] = [];
+  
+  for (let i = 0; i < addresses.length; i++) {
+    let address = addresses[i];
+    let isDuplicate = false;
+    
+    for (let j = 0; j < uniqueAddresses.length; j++) {
+      if (address == uniqueAddresses[j]) {
+        isDuplicate = true;
+        break;
+      }
+    }
+    
+    if (!isDuplicate) {
+      uniqueAddresses.push(address);
+    }
+  }
+  
+  return uniqueAddresses;
+}
+
 import {
   SystemInstanceCreated as SystemInstanceCreatedEvent
 } from '../generated/InstanceDeployer/InstanceDeployer'
@@ -128,7 +155,8 @@ function loadSafeData(safeAddress: Address, safe: Safe): void {
     for (let i = 0; i < ownersResult.value.length; i++) {
       owners.push(ownersResult.value[i].toHexString());
     }
-    safe.owners = owners;
+    // Deduplicate owners to ensure uniqueness
+    safe.owners = deduplicateAddresses(owners);
   }
   
   // Load threshold
@@ -160,7 +188,8 @@ function loadSafeData(safeAddress: Address, safe: Safe): void {
     }
   }
   
-  safe.modules = modules;
+  // Deduplicate modules to ensure uniqueness
+  safe.modules = deduplicateAddresses(modules);
   safe.save();
 }
 
@@ -266,9 +295,14 @@ export function handleAddedOwner(event: AddedOwnerEvent): void {
   
   if (safe) {
     let owners = safe.owners;
-    owners.push(event.params.owner.toHexString());
-    safe.owners = owners;
-    safe.save();
+    let ownerAddress = event.params.owner.toHexString();
+    
+    // Only add the owner if it doesn't already exist in the array
+    if (owners.indexOf(ownerAddress) === -1) {
+      owners.push(ownerAddress);
+      safe.owners = owners;
+      safe.save();
+    }
   }
 }
 
@@ -278,10 +312,18 @@ export function handleRemovedOwner(event: RemovedOwnerEvent): void {
   
   if (safe) {
     let owners = safe.owners;
-    let index = owners.indexOf(event.params.owner.toHexString());
-    if (index > -1) {
-      owners.splice(index, 1);
-      safe.owners = owners;
+    let ownerAddress = event.params.owner.toHexString();
+    
+    // Remove all occurrences of the owner address
+    let filteredOwners: string[] = [];
+    for (let i = 0; i < owners.length; i++) {
+      if (owners[i] !== ownerAddress) {
+        filteredOwners.push(owners[i]);
+      }
+    }
+    
+    if (filteredOwners.length !== owners.length) {
+      safe.owners = filteredOwners;
       safe.save();
     }
   }
@@ -303,9 +345,14 @@ export function handleEnabledModule(event: EnabledModuleEvent): void {
   
   if (safe) {
     let modules = safe.modules;
-    modules.push(event.params.module.toHexString());
-    safe.modules = modules;
-    safe.save();
+    let moduleAddress = event.params.module.toHexString();
+    
+    // Only add the module if it doesn't already exist in the array
+    if (modules.indexOf(moduleAddress) === -1) {
+      modules.push(moduleAddress);
+      safe.modules = modules;
+      safe.save();
+    }
   }
 }
 
@@ -315,10 +362,18 @@ export function handleDisabledModule(event: DisabledModuleEvent): void {
   
   if (safe) {
     let modules = safe.modules;
-    let index = modules.indexOf(event.params.module.toHexString());
-    if (index > -1) {
-      modules.splice(index, 1);
-      safe.modules = modules;
+    let moduleAddress = event.params.module.toHexString();
+    
+    // Remove all occurrences of the module address
+    let filteredModules: string[] = [];
+    for (let i = 0; i < modules.length; i++) {
+      if (modules[i] !== moduleAddress) {
+        filteredModules.push(modules[i]);
+      }
+    }
+    
+    if (filteredModules.length !== modules.length) {
+      safe.modules = filteredModules;
       safe.save();
     }
   }
