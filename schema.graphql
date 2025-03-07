@@ -1,7 +1,41 @@
+type Safe @entity {
+  id: ID!                  # Safe address
+  owners: [String!]!       # List of current owner addresses
+  threshold: BigInt!       # Number of signatures required
+  modules: [String!]!      # List of enabled module addresses
+  systemInstance: SystemInstance! # Reference to the system instance
+}
+
+type Timelock @entity {
+  id: ID!                  # Timelock address
+  minDelay: BigInt!        # Minimum delay for proposals
+  expirationPeriod: BigInt! # Period after which proposals expire
+  guardian: String         # Current timelock guardian
+  pauseDuration: BigInt!   # Duration the contract can be paused for
+  isPaused: Boolean!       # Whether the contract is currently paused
+  pauseEndTime: BigInt     # When the pause will end (if paused)
+  proposals: [TimelockProposal!]! @derivedFrom(field: "timelock") # List of proposals
+  systemInstance: SystemInstance! # Reference to the system instance
+}
+
+type TimelockProposal @entity {
+  id: ID!                  # Proposal ID (bytes32)
+  timelock: Timelock!      # Reference to the Timelock
+  targets: [String!]!      # Target addresses
+  values: [BigInt!]!       # Values in wei
+  payloads: [String!]!     # Calldata payloads (hex encoded)
+  executionTime: BigInt    # When the proposal can be executed
+  executed: Boolean!       # Whether the proposal has been executed
+  cancelled: Boolean!      # Whether the proposal has been cancelled
+  expired: Boolean!        # Whether the proposal has expired
+}
+
 type SystemInstance @entity {
   id: ID!                    # A unique identifier (could be transaction hash + log index)
   safe: String!              # The address of the safe (as a hex string)
   timelock: String!          # The address of the timelock (as a hex string)
   creator: String!           # The address that created the instance (as a hex string)
   creationTime: BigInt!      # When the instance was created
+  safeData: Safe             # Reference to the Safe entity
+  timelockData: Timelock     # Reference to the Timelock entity
 }
