@@ -1,29 +1,25 @@
-specVersion: 0.0.2
-description: POAP
-repository: https://github.com/poap-xyz/poap-mainnet-subgraph
+specVersion: 0.0.4
+description: Instance Deployer Subgraph
 schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum/contract
-    name: Poap
+    name: InstanceDeployer
     network: {{ network }}
     source:
       address: "{{ address }}"
-      abi: Poap
+      abi: InstanceDeployer
       startBlock: {{ startBlock }}
     mapping:
       kind: ethereum/events
-      apiVersion: 0.0.5
+      apiVersion: 0.0.6
       language: wasm/assemblyscript
       entities:
-        - EventToken
-        - Transfer
+        - SystemInstance
       abis:
-        - name: Poap
-          file: ./abis/{{ file }}.json
+        - name: InstanceDeployer
+          file: ./abis/InstanceDeployer.json
       eventHandlers:
-        - event: {{ tokenEvent }}
-          handler: handleEventToken
-        - event: Transfer(indexed address,indexed address,indexed uint256)
-          handler: handleTransfer
+        - event: SystemInstanceCreated(indexed address,indexed address,indexed address,uint256)
+          handler: handleSystemInstanceCreated
       file: ./src/mapping.ts
