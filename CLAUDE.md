@@ -91,3 +91,29 @@ yarn prepare:optimism && yarn codegen && yarn build && yarn deploy:optimism
 - HotSigner entity enables reverse lookup: "find all Timelocks where address is hot signer"
 - TimelockProposal references its parent Timelock
 - CalldataWhitelist references its parent Timelock
+
+## Code Review Guidelines
+
+When reviewing PRs for this subgraph, verify:
+
+### Schema (schema.graphql)
+- All entities have proper ID fields
+- Required vs optional fields are correct (use `!` appropriately)
+- Derived fields use `@derivedFrom` correctly
+- Comments explain the purpose of each entity
+
+### Handlers (src/mapping.ts)
+- Use `try_` methods for contract calls to handle reverts gracefully
+- Always check if entity exists with `Entity.load()` before updating
+- Deduplicate arrays before saving to prevent duplicates
+- Use consistent semicolons at end of statements
+- Create related entities (Owner, HotSigner) when processing events
+
+### Configuration
+- Verify network names match The Graph's supported networks
+- Verify contract addresses are checksummed correctly
+- Verify start blocks correspond to actual contract deployment
+
+### Event Signatures (subgraph.template.yaml)
+- Event signatures must match ABI exactly (including `indexed` keyword)
+- Handler names must match exported functions in mapping.ts

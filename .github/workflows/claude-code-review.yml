@@ -1,0 +1,33 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request for the Kleidi subgraph project. Focus on:
+
+            1. **Schema correctness**: Verify GraphQL schema changes are valid and follow conventions
+            2. **Handler logic**: Check event handlers for proper entity creation, updates, and edge cases
+            3. **Code style**: Ensure consistent formatting (semicolons, naming conventions)
+            4. **Documentation**: Verify README and comments are accurate
+            5. **Security**: Check for any potential issues in the indexing logic
+
+            Provide constructive feedback with specific line references where applicable.
+          claude_args: "--max-turns 5"
