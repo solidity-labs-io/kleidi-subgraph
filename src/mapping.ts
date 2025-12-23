@@ -71,15 +71,25 @@ import {
   PauseDurationUpdated as PauseDurationUpdatedEvent,
   PauseGuardianUpdated as PauseGuardianUpdatedEvent,
   PauseTimeUpdated as PauseTimeUpdatedEvent,
-  Paused as PausedEvent
+  Paused as PausedEvent,
+  CalldataAdded as CalldataAddedEvent,
+  CalldataRemoved as CalldataRemovedEvent,
+  NativeTokensReceived as NativeTokensReceivedEvent,
+  RoleGranted as RoleGrantedEvent,
+  RoleRevoked as RoleRevokedEvent
 } from '../generated/templates/Timelock/Timelock'
 
 import {
   SystemInstance,
   Safe,
   Timelock,
-  TimelockProposal
+  TimelockProposal,
+  Owner,
+  HotSigner,
+  CalldataWhitelist
 } from '../generated/schema'
+
+const HOT_SIGNER_ROLE = "0x34a5ffc669fd0f17f2f94ddbbf3e5c2f14eb146d92a0965f1b5f1dabd3a64b1b"
 
 /**
  * Creates a unique ID for an event
@@ -111,6 +121,11 @@ export function handleSystemInstanceCreated(event: SystemInstanceCreatedEvent): 
   safe.threshold = BigInt.fromI32(0);
   safe.modules = [];
   safe.systemInstance = systemInstance.id;
+  safe.createdAt = event.block.timestamp;
+  safe.createdAtBlock = event.block.number;
+  safe.guard = "";
+  safe.transactionHash = event.transaction.hash.toHexString();
+  safe.ownerEntities = [];
   
   // Create Timelock entity
   let timelock = new Timelock(systemInstance.timelock);
@@ -121,6 +136,10 @@ export function handleSystemInstanceCreated(event: SystemInstanceCreatedEvent): 
   timelock.isPaused = false;
   timelock.pauseEndTime = null;
   timelock.systemInstance = systemInstance.id;
+  timelock.createdAt = event.block.timestamp;
+  timelock.createdAtBlock = event.block.number;
+  timelock.hotSigners = [];
+  timelock.hotSignerEntities = [];
   
   // Link entities
   systemInstance.safeData = safe.id;
@@ -147,16 +166,28 @@ export function handleSystemInstanceCreated(event: SystemInstanceCreatedEvent): 
  */
 function loadSafeData(safeAddress: Address, safe: Safe): void {
   let safeContract = SafeContract.bind(safeAddress);
-  
+
   // Load owners
   let ownersResult = safeContract.try_getOwners();
   if (!ownersResult.reverted) {
     let owners: string[] = [];
+    let ownerEntities: string[] = [];
     for (let i = 0; i < ownersResult.value.length; i++) {
-      owners.push(ownersResult.value[i].toHexString());
+      let ownerAddress = ownersResult.value[i].toHexString();
+      owners.push(ownerAddress);
+
+      // Create or update Owner entity
+      let owner = Owner.load(ownerAddress);
+      if (!owner) {
+        owner = new Owner(ownerAddress);
+        owner.createdAt = safe.createdAt;
+        owner.save();
+      }
+      ownerEntities.push(ownerAddress);
     }
     // Deduplicate owners to ensure uniqueness
     safe.owners = deduplicateAddresses(owners);
+    safe.ownerEntities = deduplicateAddresses(ownerEntities);
   }
   
   // Load threshold
@@ -200,29 +231,51 @@ function loadSafeData(safeAddress: Address, safe: Safe): void {
  */
 function loadTimelockData(timelockAddress: Address, timelock: Timelock): void {
   let timelockContract = TimelockContract.bind(timelockAddress);
-  
+
   // Load minDelay
   let minDelayResult = timelockContract.try_minDelay();
   if (!minDelayResult.reverted) {
     timelock.minDelay = minDelayResult.value;
   }
-  
+
   // Load expirationPeriod
   let expirationPeriodResult = timelockContract.try_expirationPeriod();
   if (!expirationPeriodResult.reverted) {
     timelock.expirationPeriod = expirationPeriodResult.value;
   }
-  
+
   // Load guardian
   let guardianResult = timelockContract.try_pauseGuardian();
   if (!guardianResult.reverted) {
     timelock.guardian = guardianResult.value.toHexString();
   }
-  
+
   // Load pauseDuration
   let pauseDurationResult = timelockContract.try_pauseDuration();
   if (!pauseDurationResult.reverted) {
     timelock.pauseDuration = pauseDurationResult.value;
+  }
+
+  // Load hot signers
+  let hotSignersResult = timelockContract.try_getRoleMembers(Bytes.fromHexString(HOT_SIGNER_ROLE));
+  if (!hotSignersResult.reverted) {
+    let hotSigners: string[] = [];
+    let hotSignerEntities: string[] = [];
+    for (let i = 0; i < hotSignersResult.value.length; i++) {
+      let signerAddress = hotSignersResult.value[i].toHexString();
+      hotSigners.push(signerAddress);
+
+      // Create or update HotSigner entity
+      let hotSigner = HotSigner.load(signerAddress);
+      if (!hotSigner) {
+        hotSigner = new HotSigner(signerAddress);
+        hotSigner.createdAt = timelock.createdAt;
+        hotSigner.save();
+      }
+      hotSignerEntities.push(signerAddress);
+    }
+    timelock.hotSigners = hotSigners;
+    timelock.hotSignerEntities = hotSignerEntities;
   }
   
   // Load isPaused
@@ -292,28 +345,43 @@ function loadTimelockData(timelockAddress: Address, timelock: Timelock): void {
 export function handleAddedOwner(event: AddedOwnerEvent): void {
   let safeAddress = event.address.toHexString();
   let safe = Safe.load(safeAddress);
-  
+
   if (safe) {
     let owners = safe.owners;
     let ownerAddress = event.params.owner.toHexString();
-    
+
+    // Create or update Owner entity
+    let owner = Owner.load(ownerAddress);
+    if (!owner) {
+      owner = new Owner(ownerAddress);
+      owner.createdAt = event.block.timestamp;
+      owner.save();
+    }
+
     // Only add the owner if it doesn't already exist in the array
     if (owners.indexOf(ownerAddress) === -1) {
       owners.push(ownerAddress);
       safe.owners = owners;
-      safe.save();
     }
+
+    let ownerEntities = safe.ownerEntities;
+    if (ownerEntities.indexOf(ownerAddress) === -1) {
+      ownerEntities.push(ownerAddress);
+      safe.ownerEntities = ownerEntities;
+    }
+
+    safe.save();
   }
 }
 
 export function handleRemovedOwner(event: RemovedOwnerEvent): void {
   let safeAddress = event.address.toHexString();
   let safe = Safe.load(safeAddress);
-  
+
   if (safe) {
     let owners = safe.owners;
     let ownerAddress = event.params.owner.toHexString();
-    
+
     // Remove all occurrences of the owner address
     let filteredOwners: string[] = [];
     for (let i = 0; i < owners.length; i++) {
@@ -321,9 +389,18 @@ export function handleRemovedOwner(event: RemovedOwnerEvent): void {
         filteredOwners.push(owners[i]);
       }
     }
-    
+
+    let ownerEntities = safe.ownerEntities;
+    let filteredOwnerEntities: string[] = [];
+    for (let i = 0; i < ownerEntities.length; i++) {
+      if (ownerEntities[i] !== ownerAddress) {
+        filteredOwnerEntities.push(ownerEntities[i]);
+      }
+    }
+
     if (filteredOwners.length !== owners.length) {
       safe.owners = filteredOwners;
+      safe.ownerEntities = filteredOwnerEntities;
       safe.save();
     }
   }
@@ -384,11 +461,11 @@ export function handleDisabledModule(event: DisabledModuleEvent): void {
 export function handleCallScheduled(event: CallScheduledEvent): void {
   let timelockAddress = event.address.toHexString();
   let timelock = Timelock.load(timelockAddress);
-  
+
   if (timelock) {
     let proposalId = event.params.id.toHexString();
     let proposal = TimelockProposal.load(proposalId);
-    
+
     if (!proposal) {
       proposal = new TimelockProposal(proposalId);
       proposal.timelock = timelockAddress;
@@ -399,20 +476,22 @@ export function handleCallScheduled(event: CallScheduledEvent): void {
       proposal.cancelled = false;
       proposal.expired = false;
     }
-    
+
     let targets = proposal.targets;
     let values = proposal.values;
     let payloads = proposal.payloads;
-    
+
     targets.push(event.params.target.toHexString());
     values.push(event.params.value);
     payloads.push(event.params.data.toHexString());
-    
+
     proposal.targets = targets;
     proposal.values = values;
     proposal.payloads = payloads;
     proposal.executionTime = event.block.timestamp.plus(event.params.delay);
-    
+    proposal.scheduledAt = event.block.timestamp;
+    proposal.scheduledAtBlock = event.block.number;
+
     proposal.save();
   }
 }
@@ -420,9 +499,10 @@ export function handleCallScheduled(event: CallScheduledEvent): void {
 export function handleCallExecuted(event: CallExecutedEvent): void {
   let proposalId = event.params.id.toHexString();
   let proposal = TimelockProposal.load(proposalId);
-  
+
   if (proposal) {
     proposal.executed = true;
+    proposal.executedAt = event.block.timestamp;
     proposal.save();
   }
 }
@@ -430,9 +510,10 @@ export function handleCallExecuted(event: CallExecutedEvent): void {
 export function handleCancelled(event: CancelledEvent): void {
   let proposalId = event.params.id.toHexString();
   let proposal = TimelockProposal.load(proposalId);
-  
+
   if (proposal) {
     proposal.cancelled = true;
+    proposal.cancelledAt = event.block.timestamp;
     proposal.save();
   }
 }
@@ -440,9 +521,10 @@ export function handleCancelled(event: CancelledEvent): void {
 export function handleCleanup(event: CleanupEvent): void {
   let proposalId = event.params.id.toHexString();
   let proposal = TimelockProposal.load(proposalId);
-  
+
   if (proposal) {
     proposal.expired = true;
+    proposal.expiredAt = event.block.timestamp;
     proposal.save();
   }
 }
@@ -502,21 +584,126 @@ export function handlePauseTimeUpdated(event: PauseTimeUpdatedEvent): void {
 export function handlePaused(event: PausedEvent): void {
   let timelockAddress = event.address.toHexString();
   let timelock = Timelock.load(timelockAddress);
-  
+
   if (timelock) {
     timelock.isPaused = true;
-    
+
     // Calculate pause end time
     let timelockContract = TimelockContract.bind(event.address);
     let pauseStartTimeResult = timelockContract.try_pauseStartTime();
     let pauseDurationResult = timelockContract.try_pauseDuration();
-    
+
     if (!pauseStartTimeResult.reverted && !pauseDurationResult.reverted) {
       timelock.pauseEndTime = pauseStartTimeResult.value.plus(
         pauseDurationResult.value
       );
     }
-    
+
+    timelock.save();
+  }
+}
+
+export function handleCalldataAdded(event: CalldataAddedEvent): void {
+  let timelockAddress = event.address.toHexString();
+  let id = timelockAddress + "-" + event.params.contractAddress.toHexString() + "-" + event.params.selector.toHexString() + "-" + event.params.startIndex.toString() + "-" + event.params.endIndex.toString();
+
+  let whitelist = new CalldataWhitelist(id);
+  whitelist.timelock = timelockAddress;
+  whitelist.contractAddress = event.params.contractAddress.toHexString();
+  whitelist.selector = event.params.selector.toHexString();
+  whitelist.startIndex = event.params.startIndex;
+  whitelist.endIndex = event.params.endIndex;
+
+  let dataHashes: string[] = [];
+  for (let i = 0; i < event.params.dataHash.length; i++) {
+    dataHashes.push(event.params.dataHash[i].toHexString());
+  }
+  whitelist.dataHashes = dataHashes;
+  whitelist.isActive = true;
+  whitelist.addedAtBlock = event.block.number;
+  whitelist.removedAtBlock = null;
+  whitelist.save();
+}
+
+export function handleCalldataRemoved(event: CalldataRemovedEvent): void {
+  let timelockAddress = event.address.toHexString();
+  let id = timelockAddress + "-" + event.params.contractAddress.toHexString() + "-" + event.params.selector.toHexString() + "-" + event.params.startIndex.toString() + "-" + event.params.endIndex.toString();
+
+  let whitelist = CalldataWhitelist.load(id);
+  if (whitelist) {
+    whitelist.isActive = false;
+    whitelist.removedAtBlock = event.block.number;
+    whitelist.save();
+  }
+}
+
+export function handleNativeTokensReceived(event: NativeTokensReceivedEvent): void {
+  // Native token deposits are tracked by the event itself
+  // The timelock entity doesn't need to track balance as it can be queried on-chain
+}
+
+export function handleRoleGranted(event: RoleGrantedEvent): void {
+  if (event.params.role.toHexString() != HOT_SIGNER_ROLE) return;
+
+  let timelockAddress = event.address.toHexString();
+  let timelock = Timelock.load(timelockAddress);
+
+  if (timelock) {
+    let signerAddress = event.params.account.toHexString();
+
+    // Create or update HotSigner entity
+    let hotSigner = HotSigner.load(signerAddress);
+    if (!hotSigner) {
+      hotSigner = new HotSigner(signerAddress);
+      hotSigner.createdAt = event.block.timestamp;
+      hotSigner.save();
+    }
+
+    // Add to timelock hot signers if not already present
+    let hotSigners = timelock.hotSigners;
+    if (hotSigners.indexOf(signerAddress) === -1) {
+      hotSigners.push(signerAddress);
+      timelock.hotSigners = hotSigners;
+    }
+
+    let hotSignerEntities = timelock.hotSignerEntities;
+    if (hotSignerEntities.indexOf(signerAddress) === -1) {
+      hotSignerEntities.push(signerAddress);
+      timelock.hotSignerEntities = hotSignerEntities;
+    }
+
+    timelock.save();
+  }
+}
+
+export function handleRoleRevoked(event: RoleRevokedEvent): void {
+  if (event.params.role.toHexString() != HOT_SIGNER_ROLE) return;
+
+  let timelockAddress = event.address.toHexString();
+  let timelock = Timelock.load(timelockAddress);
+
+  if (timelock) {
+    let signerAddress = event.params.account.toHexString();
+
+    // Remove from timelock hot signers
+    let hotSigners = timelock.hotSigners;
+    let filteredSigners: string[] = [];
+    for (let i = 0; i < hotSigners.length; i++) {
+      if (hotSigners[i] != signerAddress) {
+        filteredSigners.push(hotSigners[i]);
+      }
+    }
+    timelock.hotSigners = filteredSigners;
+
+    let hotSignerEntities = timelock.hotSignerEntities;
+    let filteredEntities: string[] = [];
+    for (let i = 0; i < hotSignerEntities.length; i++) {
+      if (hotSignerEntities[i] != signerAddress) {
+        filteredEntities.push(hotSignerEntities[i]);
+      }
+    }
+    timelock.hotSignerEntities = filteredEntities;
+
     timelock.save();
   }
 }

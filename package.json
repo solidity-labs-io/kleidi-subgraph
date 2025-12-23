@@ -6,6 +6,10 @@
     "build": "graph build",
     "prepare:base": "mustache config/base.json subgraph.template.yaml > subgraph.yaml",
     "deploy:base": "goldsky subgraph deploy solidity-labs/instance-deployer-base",
+    "prepare:mainnet": "mustache config/mainnet.json subgraph.template.yaml > subgraph.yaml",
+    "deploy:mainnet": "goldsky subgraph deploy solidity-labs/instance-deployer-mainnet",
+    "prepare:optimism": "mustache config/optimism.json subgraph.template.yaml > subgraph.yaml",
+    "deploy:optimism": "goldsky subgraph deploy solidity-labs/instance-deployer-optimism",
     "create-local": "graph create --node http://localhost:8020/ solidity-labs/instance-deployer",
     "remove-local": "graph remove --node http://localhost:8020/ solidity-labs/instance-deployer",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 solidity-labs/instance-deployer"

@@ -1,9 +1,44 @@
+# Owner represents a multisig signer on a Safe
+# This is distinct from HotSigner which is a privileged role on the Timelock
+type Owner @entity {
+  id: ID!                    # EOA address (lowercase)
+  safes: [Safe!]! @derivedFrom(field: "ownerEntities")
+  createdAt: BigInt!         # First seen timestamp
+}
+
+# HotSigner represents an address with HOT_SIGNER_ROLE on a Timelock
+# Hot signers can execute whitelisted transactions instantly without delay
+# This is distinct from Owner which is a multisig signer on the Safe
+type HotSigner @entity {
+  id: ID!                    # EOA address (lowercase)
+  timelocks: [Timelock!]! @derivedFrom(field: "hotSignerEntities")
+  createdAt: BigInt!         # First seen timestamp
+}
+
 type Safe @entity {
   id: ID!                  # Safe address
   owners: [String!]!       # List of current owner addresses
   threshold: BigInt!       # Number of signatures required
   modules: [String!]!      # List of enabled module addresses
   systemInstance: SystemInstance! # Reference to the system instance
+  ownerEntities: [Owner!]!   # Reference to Owner entities for reverse lookup
+  createdAt: BigInt!         # Creation timestamp
+  createdAtBlock: BigInt!    # Block number
+  guard: String              # Guard contract address
+  transactionHash: String    # Creation tx hash
+}
+
+type CalldataWhitelist @entity {
+  id: ID!                    # timelock-contract-selector-startIndex-endIndex
+  timelock: Timelock!        # Parent timelock
+  contractAddress: String!   # Target contract
+  selector: String!          # Function selector (bytes4)
+  startIndex: Int!           # Calldata check start
+  endIndex: Int!             # Calldata check end
+  dataHashes: [String!]!     # Whitelisted data hashes
+  isActive: Boolean!         # Whether currently active
+  addedAtBlock: BigInt!      # When added
+  removedAtBlock: BigInt     # When removed (null if active)
 }
 
 type Timelock @entity {
@@ -16,6 +51,12 @@ type Timelock @entity {
   pauseEndTime: BigInt     # When the pause will end (if paused)
   proposals: [TimelockProposal!]! @derivedFrom(field: "timelock") # List of proposals
   systemInstance: SystemInstance! # Reference to the system instance
+  calldataWhitelist: [CalldataWhitelist!]! @derivedFrom(field: "timelock")
+  createdAt: BigInt!         # Creation timestamp
+  createdAtBlock: BigInt!    # Block number
+  # Hot signers - addresses with HOT_SIGNER_ROLE that can execute whitelisted txs instantly
+  hotSigners: [String!]!     # List of current hot signer addresses
+  hotSignerEntities: [HotSigner!]! # Reference to HotSigner entities for reverse lookup
 }
 
 type TimelockProposal @entity {
@@ -28,6 +69,11 @@ type TimelockProposal @entity {
   executed: Boolean!       # Whether the proposal has been executed
   cancelled: Boolean!      # Whether the proposal has been cancelled
   expired: Boolean!        # Whether the proposal has expired
+  scheduledAt: BigInt        # When scheduled (null for historical proposals)
+  scheduledAtBlock: BigInt   # Block scheduled (null for historical proposals)
+  executedAt: BigInt         # When executed (null if not)
+  cancelledAt: BigInt        # When cancelled (null if not)
+  expiredAt: BigInt          # When expired (null if not)
 }
 
 type SystemInstance @entity {
