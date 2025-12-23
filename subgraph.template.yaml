@@ -19,6 +19,9 @@ dataSources:
         - Safe
         - Timelock
         - TimelockProposal
+        - CalldataWhitelist
+        - HotSigner
+        - Owner
       abis:
         - name: InstanceDeployer
           file: ./abis/InstanceDeployer.json
@@ -47,15 +50,15 @@ templates:
         - name: Safe
           file: ./abis/Safe.json
       eventHandlers:
-        - event: AddedOwner(address)
+        - event: AddedOwner(indexed address)
           handler: handleAddedOwner
-        - event: RemovedOwner(address)
+        - event: RemovedOwner(indexed address)
           handler: handleRemovedOwner
         - event: ChangedThreshold(uint256)
           handler: handleChangedThreshold
-        - event: EnabledModule(address)
+        - event: EnabledModule(indexed address)
           handler: handleEnabledModule
-        - event: DisabledModule(address)
+        - event: DisabledModule(indexed address)
           handler: handleDisabledModule
 
   - kind: ethereum/contract
@@ -71,6 +74,9 @@ templates:
       entities:
         - Timelock
         - TimelockProposal
+        - CalldataWhitelist
+        - HotSigner
+        - Owner
       abis:
         - name: Timelock
           file: ./abis/Timelock.json
@@ -93,5 +99,15 @@ templates:
           handler: handlePauseGuardianUpdated
         - event: PauseTimeUpdated(indexed uint256)
           handler: handlePauseTimeUpdated
-        - event: Paused(address)
+        - event: Paused(indexed address)
           handler: handlePaused
+        - event: CalldataAdded(indexed address,indexed bytes4,uint16,uint16,bytes32[])
+          handler: handleCalldataAdded
+        - event: CalldataRemoved(indexed address,indexed bytes4,uint16,uint16,bytes32[])
+          handler: handleCalldataRemoved
+        - event: NativeTokensReceived(indexed address,uint256)
+          handler: handleNativeTokensReceived
+        - event: RoleGranted(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleGranted
+        - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleRevoked
